@@ -1,0 +1,34 @@
+# ==========================================================================
+#  C3S Climate Lab — dépendances Python
+#
+#  Installation :
+#      pip install -r requirements.txt
+#
+#  Puis configuration de la clé CDS :
+#      .\install_cds_key.ps1          (Windows)
+# ==========================================================================
+
+# --- Accès au Climate Data Store -------------------------------------------
+cdsapi>=0.7.2
+ecmwf-datastores-client>=0.5.0
+
+# --- Lecture et manipulation des données -----------------------------------
+xarray>=2024.2
+netCDF4>=1.6
+h5netcdf>=1.2
+numpy>=1.26
+pandas>=2.0
+
+# --- Rendu des graphiques et des cartes -------------------------------------
+plotly>=5.20
+matplotlib>=3.7
+
+# --- Géométrie (utilisée par les fonds de carte) ----------------------------
+geopandas>=0.14
+shapely>=2.0
+
+# --- Interface web ----------------------------------------------------------
+streamlit>=1.32
+
+# --- Divers -----------------------------------------------------------------
+requests>=2.31
