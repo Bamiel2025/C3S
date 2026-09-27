@@ -475,3 +475,101 @@ def ombrothermic_diagram(
         hovermode="x",
     )
     return fig
+
+
+# --------------------------------------------------------------------------- #
+# Avant / après
+# --------------------------------------------------------------------------- #
+
+
+def before_after_charts(
+    before: pd.Series,
+    after: pd.Series,
+    before_label: str,
+    after_label: str,
+    *,
+    unit: str = "°C",
+    title: str = "Comparaison de deux périodes",
+    height: int = 400,
+) -> go.Figure:
+    """
+    Deux courbes superposées : la période de référence et la période récente.
+
+    L'écart entre les deux courbes est colorée : le réchauffement devient
+    visible sans aucun calcul, ce qui est l'essentiel pour des élèves de cycle 4.
+    """
+    fig = go.Figure()
+    common = before.index.union(after.index)
+    b = before.reindex(common)
+    a = after.reindex(common)
+
+    fig.add_trace(
+        go.Scatter(
+            x=common, y=b, mode="lines", name=before_label,
+            line=dict(color="#457b9d", width=3),
+            hovertemplate=f"{before_label}<br>%{{x}}|%{{y:.2f}} {unit}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=common, y=a, mode="lines", name=after_label,
+            line=dict(color="#d1495b", width=3),
+            hovertemplate=f"{after_label}<br>%{{x}}|%{{y:.2f}} {unit}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=list(common) + list(common[::-1]),
+            y=list(a.values) + list(b.values[::-1]),
+            fill="toself", fillcolor="rgba(209,73,91,0.16)", mode="lines",
+            line=dict(width=0), name="écart entre les deux périodes",
+            hoverinfo="skip",
+        )
+    )
+    _style_axes(fig, "", f"{title} ({unit})")
+    fig.update_layout(height=height, **FR_LAYOUT)
+    return fig
+
+
+def delta_scale(values) -> tuple[list, float, float]:
+    """
+    Échelle divergente centrée sur zéro, pour une carte d'écart.
+
+    Une échelle divergente signale le signe de l'anomalie ; une échelle
+    séquentielle le masquerait et fausserait la lecture.
+    """
+    finite = np.asarray(values, dtype="float64")
+    finite = finite[np.isfinite(finite)]
+    limit = float(np.nanmax(np.abs(finite))) if finite.size else 1.0
+    limit = max(limit, 0.1)
+    scale = [
+        [0.0, "#08306b"], [0.25, "#2171b5"], [0.5, "#f7f7f7"],
+        [0.75, "#cb181d"], [1.0, "#67000d"],
+    ]
+    return scale, -limit, limit
+
+
+def delta_bars(
+    labels: list[str],
+    deltas: list[float],
+    unit: str = "°C",
+    *,
+    title: str = "Écart de température",
+    height: int = 400,
+) -> go.Figure:
+    """Barres d'écart, colorées selon le signe : froid en bleu, chaud en rouge."""
+    colors = ["#d1495b" if d >= 0 else "#457b9d" for d in deltas]
+    fig = go.Figure(
+        go.Bar(
+            x=labels, y=deltas, marker=dict(color=colors),
+            text=[f"{d:+.1f} {unit}" for d in deltas],
+            textposition="outside",
+            hovertemplate="%{x}<br>écart %{y:+.2f} " + unit + "<extra></extra>",
+        )
+    )
+    fig.add_hline(y=0, line=dict(color="#333", width=1.2))
+    _style_axes(fig, "", f"{title} ({unit})")
+    fig.update_layout(height=height, **FR_LAYOUT, showlegend=False)
+    return fig
+
+    return fig

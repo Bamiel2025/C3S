@@ -527,6 +527,91 @@ def _coord(da, name: str) -> np.ndarray:
     raise KeyError(f"Coordonnée « {name} » absente du champ.")
 
 
+def blend_frames(figures: list[go.Figure], labels: list[str], *, n_steps: int = 21) -> go.Figure:
+    """
+    Fusionne deux figures géographiques en une carte animée à curseur.
+
+    Chaque image est un mélange progressif : à `t = 0` on voit entièrement la
+    première période, à `t = 1` la seconde. Le curseur sous la figure laisse
+    l'élève faire défiler la transformation, ce qui rend le changement spatial
+    immédiatement visible.
+    """
+    if len(figures) != 2 or len(labels) != 2:
+        raise ValueError("blend_frames attend exactement deux figures et deux libellés.")
+
+    fig_a, fig_b = figures
+    # On ne conserve que la première trace de données (les cellules colorées) et
+    # la trame de pays, dans le même ordre pour les deux figures.
+    traces_a = [t for t in fig_a.data if t.type in ("scattergeo",)]
+    traces_b = [t for t in fig_b.data if t.type in ("scattergeo",)]
+    if not traces_a or not traces_b:
+        raise ValueError("Les figures doivent contenir des traces géographiques.")
+
+    cell_a, border_a = _split_traces(traces_a)
+    cell_b, border_b = _split_traces(traces_b)
+    if cell_a is None or cell_b is None:
+        raise ValueError("Traces de cellules introuvables dans les figures.")
+
+    def color_mix(ca, cb, t):
+        """Mélange deux tableaux de couleurs (valeurs numériques) linéairement."""
+        import numpy as np
+        a = np.asarray(ca, dtype="float64")
+        b = np.asarray(cb, dtype="float64")
+        return a * (1 - t) + b * t
+
+    def cell_at(t):
+        import numpy as np
+        t = float(t)
+        return go.Scattergeo(
+            lat=cell_a.lat, lon=cell_a.lon, mode="markers", geo="geo", showlegend=False,
+            marker=dict(
+                symbol="square", size=cell_a.marker.size,
+                color=color_mix(cell_a.marker.color, cell_b.marker.color, t),
+                colorscale=cell_a.marker.colorscale, cmin=cell_a.marker.cmin,
+                cmax=cell_a.marker.cmax, opacity=0.95, line=dict(width=0),
+                colorbar=cell_a.marker.colorbar,
+            ),
+        )
+
+    frames, steps = [], []
+    for i in range(n_steps):
+        t = i / (n_steps - 1)
+        name = f"{labels[0]} → {labels[1]}  ({round(t * 100)} %)"
+        frames.append(go.Frame(name=name, data=[cell_at(t)] + ([border_a] if border_a else [])))
+        steps.append({
+            "label": f"{round(t * 100)} %",
+            "method": "animate",
+            "args": [[name], {"mode": "immediate", "frame": {"duration": 0}}],
+        })
+
+    out = go.Figure(data=frames[0].data, frames=frames)
+    out.update_layout(fig_b.layout)
+    out.update_layout(
+        sliders=[{
+            "active": 0, "steps": steps,
+            "currentvalue": {"prefix": "Mélange : "},
+            "x": 0.1, "len": 0.85, "y": -0.06, "pad": {"t": 45},
+        }],
+        title=dict(
+            text=f"Avant / Après : {labels[0]} → {labels[1]}"
+                 "<br><sup>Faites glisser le curseur pour voir la transformation</sup>",
+            x=0.02, xanchor="left", font=dict(size=16),
+        ),
+    )
+    return out
+
+
+def _split_traces(traces: list[go.Figure]):
+    """Sépare la trace des cellules de celle des frontières."""
+    cell = border = None
+    for t in traces:
+        if t.marker and t.marker.color is not None and t.mode == "markers":
+            cell = t
+        else:
+            border = t
+    return cell, border
+
+
 def animated_map(
     da_time,
     *,

@@ -21,6 +21,13 @@ quelques degrés. Ce niveau de précision suffit pour préparer une séance ou
 vérifier l'interface ; il ne permet en aucun cas de produire un résultat
 opposable à une publication. Toute valeur issue de ce mode doit donc être
 convertie en données CDS avant d'être communiquée.
+
+**Limite connue sur les statistiques journalières.** Le jeu simulé produit bien
+une série quotidienne, mais l'amplitude de ses extrêmes n'est pas calibrée avec
+la même rigueur que les moyennes mensuelles. Les activités qui comptent des
+journées de chaleur (activité « canicule ») donnent donc des chiffres peu
+fiables hors ligne : utilisez les données CDS pour cette activité, ou
+présentez-la comme une mise en situation sans valeur chiffrée.
 """
 
 from __future__ import annotations
@@ -41,6 +48,7 @@ def synthetic_temperature(
     area: tuple[float, float, float, float] | None = None,
     *,
     seed: int = SEED,
+    daily: bool = False,
 ) -> xr.DataArray:
     """
     Température de l'air à 2 m simulée, en °C, sur la grille demandée.
@@ -60,7 +68,13 @@ def synthetic_temperature(
     lat = np.arange(north, south - 1e-9, -0.25)
     lon = np.arange(west, east - 1e-9, 0.25)
     LA, LO = np.meshgrid(lat, lon, indexing="ij")
-    times = pd.date_range(f"{y0}-01-01", f"{y1}-12-01", freq="MS")
+    # En mode journalier, on génère un pas de temps par jour : c'est la seule
+    # façon de produire de vraies journées de chaleur. Sinon, un pas par mois.
+    times = (
+        pd.date_range(f"{y0}-01-01", f"{y1}-12-31", freq="D")
+        if daily
+        else pd.date_range(f"{y0}-01-01", f"{y1}-12-01", freq="MS")
+    )
 
     # --- Composante de base : moyenne annuelle ajustée sur des normales réelles
     #     par moindres carrés (T = a + b|φ| + c φ²), sur une quinzaine de villes
@@ -111,6 +125,26 @@ def synthetic_temperature(
     )
 
     values = annual[None, :, :] + seasonal + warming[:, None, None] + interannual
+
+    if daily:
+        # Les moyennes mensuelles ne permettent pas de compter des journées de
+        # chaleur. On superpose une variabilité journalière plausible : un cycle
+        # annuel fin, une amplitude diurne, un passage de fronts tous les dix
+        # jours environ, et quelques pics de chaleur. Le facteur d'échelle est
+        # ajusté pour qu'un été continental simulé dépasse 35 °C quelques
+        # jours par an, comme en réalité.
+        doy = times.dayofyear.values.astype("float64")[:, None, None]
+        annual_cycle = np.sin(2 * np.pi * (doy - 200.0) / 365.25)
+        continental = np.broadcast_to(1.0 - oceanity, (1,) + oceanity.shape)
+        # Amplitude diurne : faible sur les côtes, forte à l'intérieur.
+        diurnal = 4.0 * annual_cycle * (0.5 + 0.9 * continental)
+        # Fronts froids : période d'une dizaine de jours.
+        fronts = 5.0 * np.sin(2 * np.pi * doy / 9.5) * continental
+        # Pics de chaleur : quelques journées nettement au-dessus. Le facteur
+        # continental accentue les extrêmes loin des côtes.
+        heat = (rng.gamma(3.0, 3.0, size=values.shape) - 6.0) * continental
+        values = values + diurnal + fronts + heat
+
     return xr.DataArray(
         values,
         dims=("time", "latitude", "longitude"),

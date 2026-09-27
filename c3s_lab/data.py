@@ -164,35 +164,136 @@ def build_daily_request(
     }
 
 
+#: Correspondance entre le nom long utilisé dans les requêtes CDS et le nom
+#: court réellement inscrit dans les fichiers NetCDF.
+#:
+#: Le CDS accepte le nom long (`total_precipitation`) dans la requête, mais
+#: écrit le code court de la base de paramètres ECMWF (`tp`) dans le fichier.
+#: Sans cette table, toute requête réelle se termine par une `KeyError`.
+SHORT_NAMES: dict[str, str] = {
+    "2m_temperature": "t2m",
+    "maximum_2m_temperature": "mx2t",
+    "minimum_2m_temperature": "mn2t",
+    "2m_dewpoint_temperature": "d2m",
+    "total_precipitation": "tp",
+    "mean_sea_level_pressure": "msl",
+    "surface_pressure": "sp",
+    "total_cloud_cover": "tcc",
+    "snow_depth": "sd",
+    "snowfall": "sf",
+    "10m_u_component_of_wind": "10u",
+    "10m_v_component_of_wind": "10v",
+    "100m_u_component_of_wind": "100u",
+    "100m_v_component_of_wind": "100v",
+    "geopotential": "z",
+    "temperature": "t",
+    "relative_humidity": "r",
+    "specific_humidity": "q",
+    "vorticity": "vo",
+    "divergence": "d",
+    "vertical_velocity": "w",
+    "land_sea_mask": "lsm",
+}
+
+#: Conversion kelvins -> degrés Celsius.
+KELVIN_OFFSET = 273.15
+
+#: Unités telles qu'inscrites par le CDS dans le fichier, et leur conversion
+#: vers l'unité d'affichage. Décrivée sous la forme
+#:   (facteur multiplicatif, unité cible, constante additive)
+#: afin qu'aucune ambiguïté de signe ne subsiste : passer des kelvins aux
+#: degrés Celsius revient à multiplier par 1 puis **soustraire** 273,15.
+#:
+#: Rappel : la pression est stockée en pascals (1 hPa = 100 Pa) et les
+#: précipitations en mètres (1 m = 1000 mm).
+FILE_UNITS: dict[str, tuple[float, str, float]] = {
+    "K": (1.0, "°C", -KELVIN_OFFSET),
+    "kelvin": (1.0, "°C", -KELVIN_OFFSET),
+    "degC": (1.0, "°C", 0.0),
+    "m": (1000.0, "mm", 0.0),
+    "kg m-2": (1.0, "mm", 0.0),
+    "kg m**-2": (1.0, "mm", 0.0),
+    "kg m-2 s-1": (1.0, "mm/j", 0.0),
+    "Pa": (0.01, "hPa", 0.0),
+    "hPa": (1.0, "hPa", 0.0),
+    "m s**-1": (1.0, "m/s", 0.0),
+    "m s-1": (1.0, "m/s", 0.0),
+    "%": (1.0, "%", 0.0),
+}
+
+
+def _name_candidates(variable: str) -> list[str]:
+    """Noms possibles de la variable, du plus au moins probable."""
+    candidates = [variable]
+    short = SHORT_NAMES.get(variable)
+    if short:
+        candidates.append(short)
+    # Variantes rencontrées dans les fichiers CDS.
+    candidates += [f"{variable}_mean", f"{variable}_daily_mean", f"var_{variable}"]
+    if short:
+        candidates += [f"{short}_mean", f"var_{short}"]
+    return [c for i, c in enumerate(candidates) if c not in candidates[:i]]
+
+
 def _find_variable(ds: xr.Dataset, variable: str) -> xr.DataArray:
     """
     Retrouve le champ demandé dans le fichier téléchargé.
 
-    Le CDS nomme parfois la variable `valid_time` au lieu de `time`, et peut
-    ajouter des dimensions (par exemple `number` pour un membre d'ensemble).
+    Le CDS écrit le **code court** du paramètre (`tp`, `t2m`, `msl`…) et non le
+    nom long utilisé dans la requête. On essaie donc successivement le nom long,
+    le code court, puis quelques variantes, avant de Cherry-pick.
     """
-    if variable in ds:
-        da = ds[variable]
-    else:
-        candidates = [
-            v
-            for v in ds.data_vars
-            if variable.split("_")[0] in v or v.lower().startswith("var")
-        ]
-        if not candidates:
-            raise KeyError(
-                f"Variable « {variable} » absente du fichier. "
-                f"Variables disponibles : {list(ds.data_vars)}"
-            )
-        da = ds[candidates[0]]
+    available = list(ds.data_vars)
+    da = None
+    for name in _name_candidates(variable):
+        if name in ds:
+            da = ds[name]
+            break
 
-    # On se dégage des dimensions inutiles (membre d'ensemble, niveau).
-    for dim in ("number", "expver", "depth", "level"):
-        if dim in da.dims and da.sizes[dim] == 1:
+    if da is None:
+        # Dernier recours : correspondance partielle (la variable peut porter
+        # un suffixe de membre d'ensemble ou de niveau).
+        stem = SHORT_NAMES.get(variable, variable)
+        for name in available:
+            if name == variable or name == stem:
+                da = ds[name]
+                break
+            if stem in name or name in variable:
+                da = ds[name]
+                break
+
+    if da is None:
+        raise KeyError(
+            f"Variable « {variable} » absente du fichier. "
+            f"Code court attendu : « {SHORT_NAMES.get(variable, '?')} ». "
+            f"Variables disponibles : {available}"
+        )
+
+    # Dimensions parasites : membre d'ensemble, profondeur, niveau, temps valide.
+    for dim in ("number", "expver", "depth", "level", "depthBelowLand"):
+        if dim in da.dims and da.sizes.get(dim) == 1:
             da = da.squeeze(dim, drop=True)
     if "valid_time" in da.dims and "time" not in da.dims:
         da = da.rename({"valid_time": "time"})
+    if "latitude" not in da.coords and "lat" in da.coords:
+        da = da.rename(latitude="lat", longitude="lon")
     return da
+
+
+def _apply_file_units(da: xr.DataArray, variable: str) -> tuple[xr.DataArray, str]:
+    """
+    Convertit une variable dans son unité d'affichage.
+
+    On se fie d'abord à l'attribut `units` écrit par le CDS (donc à la vérité du
+    fichier), et seulement ensuite à la table de correspondance.
+    """
+    unit = str(da.attrs.get("units", "")).strip()
+    if unit in FILE_UNITS:
+        factor, target, offset = FILE_UNITS[unit]
+        return da * factor + offset, target
+    # Unité inconnue dans le fichier : on se rabat sur la table des variables,
+    # qui suppose les unités habituelles (kelvins pour la température).
+    return _to_display_units(da, variable)
 
 
 # --------------------------------------------------------------------------- #
@@ -241,6 +342,8 @@ def fetch(
         return _simulated(
             variable, (y0, y1), area, month_list,
             progress=progress, dataset_key=dataset_key,
+            daily=dataset_key == "daily_stats",
+            daily_statistic=daily_statistic,
         )
 
     if dataset_key == "daily_stats":
@@ -265,7 +368,7 @@ def fetch(
     )
     ds = cds_client.open_dataset(path)
     da = _find_variable(ds, variable)
-    da, unit = _to_display_units(da, variable)
+    da, unit = _apply_file_units(da, variable)
     da = da.transpose("time", "latitude", "longitude")
 
     if progress:
@@ -291,6 +394,8 @@ def _simulated(
     *,
     progress: Callable[[float, str], None] | None = None,
     dataset_key: str = "monthly_means",
+    daily: bool = False,
+    daily_statistic: str = "daily_mean",
 ) -> FetchResult:
     """Construit la version simulée du champ demandé."""
     if progress:
@@ -304,7 +409,18 @@ def _simulated(
         "minimum_2m_temperature": (demo.synthetic_temperature, "°C"),
     }
     builder, unit = builders.get(variable, (demo.synthetic_temperature, "°C"))
-    da = builder(years=years, area=area)
+
+    if daily and builder is demo.synthetic_temperature:
+        # Statistiques journalières : on produit une série quotidienne, puis on
+        # en extrait la moyenne, le maximum ou le minimum, comme le fait le CDS.
+        base = builder(years=years, area=area, daily=True)
+        selector = {
+            "daily_maximum": "max",
+            "daily_minimum": "min",
+        }.get(daily_statistic, "mean")
+        da = getattr(base.resample(time="MS"), selector)()
+    else:
+        da = builder(years=years, area=area)
 
     if months != list(range(1, 13)):
         da = da.sel(time=da.time.dt.month.isin(months))

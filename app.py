@@ -393,8 +393,196 @@ renvoie une erreur *« required licences not accepted »*.
 
 
 # --------------------------------------------------------------------------- #
-# Page 3 — Cartes
+# Page — Avant / après (outil de comparaison d'époques)
 # --------------------------------------------------------------------------- #
+
+#: Périodes proposées par défaut, avec leur libellé pédagogique.
+EPOCH_PRESETS = {
+    "Hier (1970-1989) vs aujourd'hui (2015-2024)": ((1970, 1989), (2015, 2024)),
+    "Avant (1950-1969) vs après (2005-2024)": ((1950, 1969), (2005, 2024)),
+    "Normale 1991-2020 vs 2015-2024": ((1991, 2020), (2015, 2024)),
+    "Écart direct : 1960 vs 2020": ((1960, 1960), (2020, 2020)),
+}
+
+
+def page_avant_apres() -> None:
+    st.title("🔄 Avant / Après : le climat a-t-il changé ?")
+    st.markdown(
+        "Comparez deux périodes et observez la différence. C'est l'outil le plus "
+        "efficace pour rendre le réchauffement visible sans calcul compliqué."
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        scope = st.selectbox("Où regarder ?", ["Une ville", "France", "Europe"])
+    with col2:
+        variable = st.selectbox(
+            "Donnée",
+            ["2m_temperature", "total_precipitation"],
+            format_func=lambda v: (
+                "Température de l'air (°C)" if "temp" in v else "Précipitations (mm)"
+            ),
+        )
+    unit = "°C" if "temp" in variable else "mm"
+
+    if scope == "Une ville":
+        city = st.selectbox("Ville", [p.name for p in places.FRENCH_CITIES])
+        place = next(p for p in places.FRENCH_CITIES if p.name == city)
+        area = (place.lat + 1.5, place.lon - 1.5, place.lat - 1.5, place.lon + 1.5)
+        st.caption(f"📍 {place.lat:.2f}°N, {place.lon:.2f}°E — {place.region}")
+
+        def extract(r, _p=place):
+            return r.series_at(_p.lat, _p.lon, name=unit)
+    else:
+        area = {"France": (51.5, -5.5, 41.0, 10.0),
+                "Europe": (72.0, -25.0, 33.0, 45.0)}[scope]
+        st.caption(
+            f"📍 {places.area_label(area)} — moyenne pondérée par le cosinus de la latitude."
+        )
+
+        def extract(r):
+            return r.area_mean()
+
+    # --- 1. Choix des deux périodes ---------------------------------------------
+    st.subheader("1. Choisir deux périodes")
+    preset = st.selectbox("Comparaison rapide", list(EPOCH_PRESETS), index=0)
+    (b0, b1), (a0, a1) = EPOCH_PRESETS[preset]
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        b0 = st.number_input("Période 1 : début", 1940, 2024, int(b0), 1)
+    with col2:
+        b1 = st.number_input("Période 1 : fin", int(b0) + 1, 2024, int(b1), 1)
+    with col3:
+        a0 = st.number_input("Période 2 : début", 1940, 2024, int(a0), 1)
+    with col4:
+        a1 = st.number_input("Période 2 : fin", int(a0) + 1, 2024, int(a1), 1)
+    if b0 >= b1 or a0 >= a1:
+        st.error("Chaque période doit contenir au moins deux années.")
+        st.stop()
+
+    with st.spinner("Récupération des données sur les deux périodes…"):
+        result = _fetch(
+            dataset_key="monthly_means", variable=variable,
+            years=(min(b0, a0), max(b1, a1)), area=area,
+        )
+    ui.data_banner(result)
+
+    series = extract(result)
+    before = analysis.monthly_climatology(series, (b0, b1))
+    after = analysis.monthly_climatology(series, (a0, a1))
+    if before.empty or after.empty:
+        st.warning("Pas assez de données sur l'une des deux périodes.")
+        st.stop()
+
+    label_b, label_a = f"{b0}–{b1}", f"{a0}–{a1}"
+    delta = (after - before).reindex(analysis.MONTH_LABELS_LONG)
+    mean_delta = float((after - before).mean())
+
+    # --- 2. Les deux courbes -----------------------------------------------------
+    st.subheader("2. Les deux périodes, mois par mois")
+    ui.show_figure(
+        viz.before_after_charts(
+            before, after, label_b, label_a, unit=unit,
+            title=f"{scope} — {label_b} comparé à {label_a}",
+        ),
+        key="avant_apres_courbes",
+    )
+    ui.show_figure(
+        viz.delta_bars(
+            list(delta.index), list(delta.values), unit,
+            title=f"Écart : {label_a} moins {label_b}",
+        ),
+        key="avant_apres_barres",
+    )
+    col1, col2, col3 = st.columns(3)
+    col1.metric(f"Moyenne {label_b}", f"{float(before.mean()):.2f} {unit}")
+    col2.metric(f"Moyenne {label_a}", f"{float(after.mean()):.2f} {unit}")
+    col3.metric("Écart moyen", f"{mean_delta:+.2f} {unit}", delta_color="off")
+
+    # --- 3. Le curseur ----------------------------------------------------------
+    st.subheader("3. Faites glisser pour voir le changement")
+    if scope == "Une ville":
+        st.info(
+            "En mode ville, la comparaison se fait sur les courbes ci-dessus : "
+            "une ville ne représente qu'un point, il n'y a pas de carte à animer. "
+            "Choisissez « France » ou « Europe » pour utiliser le curseur."
+        )
+    else:
+        st.markdown(
+            "Faites glisser le curseur : la carte se transforme progressivement de "
+            "la première période vers la seconde. Repérez les zones qui changent le plus."
+        )
+        st.caption(
+            "Chaque carré correspond à la même maille de 0,25° dans les deux cartes : "
+            "la comparaison est donc rigoureuse, et non illustrative."
+        )
+        with st.spinner("Construction des deux cartes…"):
+            data = result.data
+            field_b = data.sel(time=data.time.dt.year.isin(range(b0, b1 + 1))).mean("time")
+            field_a = data.sel(time=data.time.dt.year.isin(range(a0, a1 + 1))).mean("time")
+        scale, zmin, zmax = viz.delta_scale((field_a - field_b).values)
+        fig_b = maps.field_map(
+            field_b, title=label_b, unit=unit, period=label_b, area=area,
+            colorscale=scale, zmin=zmin, zmax=zmax,
+        )
+        fig_a = maps.field_map(
+            field_a, title=label_a, unit=unit, period=label_a, area=area,
+            colorscale=scale, zmin=zmin, zmax=zmax,
+        )
+        st.plotly_chart(
+            maps.blend_frames([fig_b, fig_a], [label_b, label_a]),
+            use_container_width=True, key="avant_apres_curseur",
+        )
+        st.caption(
+            f"Échelle de couleurs centrée sur zéro : le bleu signale un écart négatif "
+            f"(refroidissement), le rouge un écart positif (réchauffement). "
+            f"Amplitude retenue : ±{abs(zmax):.1f} {unit}."
+        )
+
+    # --- 4. Questions -----------------------------------------------------------
+    st.subheader("4. Questions pour la classe")
+    for i, q in enumerate([
+        "De combien la valeur moyenne a-t-elle changé entre ces deux périodes ?",
+        "L'écart est-il le même en janvier qu'en juillet ? Pourquoi ?",
+        "Sur la carte, quelles zones changent le plus ? Lesquelles le moins ?",
+        "Cette différence pourrait-elle venir de la seule météo ? Justifier.",
+    ], 1):
+        st.markdown(f"{i}. {q}")
+
+    if ui.is_teacher():
+        ui.method_note(
+            "Éléments de correction",
+            f"Écart moyen de **{mean_delta:+.2f} {unit}** entre {label_b} et {label_a} "
+            f"sur {scope}. L'écart croît généralement avec la latitude et la "
+            "continentalité. L'argument « simple météo » se réfute en montrant que "
+            "la variabilité naturelle est de l'ordre de ±0,3 °C, très inférieure à "
+            "l'écart mesuré sur trente ans.",
+        )
+    ui.citation()
+
+
+
+    st.subheader("Questions pour la classe")
+    questions = [
+        "De combien la température moyenne a-t-elle augmenté entre ces deux périodes ?",
+        "L'écart est-il le même en janvier qu'en juillet ? Pourquoi ?",
+        "Sur la carte, quelles régions ont le plus changé ? Lesquelles le moins ?",
+        "Cette différence pourrait-elle s'expliquer seulement par la météo ? Justifier.",
+    ]
+    for i, q in enumerate(questions, 1):
+        st.markdown(f"{i}. {q}")
+
+    if ui.is_teacher():
+        ui.method_note(
+            "Éléments de correction",
+            f"Écart moyen de **{deltas:+.2f} {unit}** entre {label_b} et {label_a} sur "
+            f"{scope}. L'écart croît généralement avec la latitude et l continentalité. "
+            "L'argument « météo » se réfute en montrant que la variabilité naturelle "
+            "est de l'ordre de ±0,3 °C, bien inférieure à l'écart mesuré sur trente ans.",
+        )
+
+    ui.citation()
+
 
 SEASONS = {
     "Année": None,
@@ -832,6 +1020,23 @@ def page_activites() -> None:
     ui.show_steps(activity.steps)
 
     st.divider()
+    if not ui.is_teacher():
+        with st.expander("🔒 Espace enseignant — codes et corrigés"):
+            st.caption(
+                "Les onglets *Accueil*, *Connexion CDS* et *Méthode* sont réservés. "
+                "Saisissez le code ci-dessous pour les débloquer ; vous les "
+                "reverrouillerez depuis la barre latérale."
+            )
+            code = st.text_input("Code enseignant", type="password", key="gate_activites")
+            if code:
+                if code.strip() == ui.TEACHER_CODE:
+                    st.session_state["teacher_unlocked"] = True
+                    st.success("Code accepté. Les onglets réservés apparaissent en bas "
+                               "du menu — rechargez la page pour les voir.")
+                    st.rerun()
+                else:
+                    st.error("Code incorrect.")
+
     with st.expander("Fiche imprimable (PDF / impression)"):
         st.markdown(_activity_sheet(activity))
         st.download_button(
@@ -1168,6 +1373,12 @@ def _figures_heatwave(activity, reference) -> None:
     tmin = _fetch(dataset_key="daily_stats", variable="minimum_2m_temperature",
                   years=(y0, y1), area=area, daily_statistic="daily_minimum")
     ui.data_banner(tmax)
+    if tmax.simulated:
+        st.info(
+            "**Comptage illustratif.** L'amplitude des extrêmes du jeu simulé "
+            "n'est pas calibrée : ces nombres servent à comprendre la méthode, "
+            "pas à établir un résultat. Passez aux données CDS pour chiffrer."
+        )
 
     rows = []
     for place in cities:
@@ -1404,22 +1615,37 @@ Conséquences à connaître :
 # Navigation
 # --------------------------------------------------------------------------- #
 
-PAGES = [
-    st.Page(page_accueil, title="Accueil", icon="🏠"),
-    st.Page(page_connexion, title="Connexion CDS", icon="🔑", url_path="connexion"),
-    st.Page(page_cartes, title="Cartes", icon="🗺️", url_path="cartes"),
-    st.Page(page_graphiques, title="Graphiques", icon="📈", url_path="graphiques"),
-    st.Page(page_villes, title="Villes", icon="🏙️", url_path="villes"),
-    st.Page(page_activites, title="Activités", icon="🎓", url_path="activites"),
-    st.Page(page_methode, title="Méthode", icon="📐", url_path="methode"),
+#: Onglets réservés à l'enseignant, ajoutés en bas de la navigation seulement
+#: après saisie du code. Ils n'existent pas du tout pour un élève : l'accès
+#: direct par URL échoue également.
+TEACHER_PAGES = [
+    ("Accueil", page_accueil, "🏠", "accueil"),
+    ("Connexion CDS", page_connexion, "🔑", "connexion"),
+    ("Méthode et données", page_methode, "📐", "methode"),
 ]
+
+
+def build_pages() -> list:
+    """Assemble la navigation : onglets élèves d'abord, enseignant en bas."""
+    pages = [
+        st.Page(page_activites, title="Activités", icon="🎓", url_path="activites"),
+        st.Page(page_avant_apres, title="Avant / Après", icon="🔄", url_path="avant-apres"),
+        st.Page(page_cartes, title="Cartes", icon="🗺️", url_path="cartes"),
+        st.Page(page_graphiques, title="Graphiques", icon="📈", url_path="graphiques"),
+        st.Page(page_villes, title="Villes", icon="🏙️", url_path="villes"),
+    ]
+    if ui.is_teacher():
+        for title, func, icon, path in TEACHER_PAGES:
+            pages.append(st.Page(func, title=title, icon=icon, url_path=path))
+    return pages
 
 
 def main() -> None:
     """Point d'entrée : styles, barre latérale commune, puis navigation."""
     ui.inject_css()
     ui.sidebar_controls()
-    st.navigation(PAGES).run()
+    ui.lock_button()
+    st.navigation(build_pages()).run()
 
 
 if __name__ == "__main__":

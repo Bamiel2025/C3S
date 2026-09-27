@@ -9,12 +9,64 @@ que la mention « données simulées » apparaît partout où c'est nécessaire.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
 from . import analysis, catalog, config, data, places
+
+# --------------------------------------------------------------------------- #
+# Accès enseignant
+# --------------------------------------------------------------------------- #
+
+#: Code permettant d'ouvrir les onglets réservés et les corrigés.
+#: Surchargeable par la variable d'environnement `C3S_TEACHER_CODE`, ce qui
+#: évite de laisser le code en clair dans un dépôt public.
+TEACHER_CODE = os.environ.get("C3S_TEACHER_CODE", "2027")
+
+#: Clé de session mémorisant la validation du code.
+_SESSION_KEY = "teacher_unlocked"
+
+
+def is_teacher() -> bool:
+    """Vrai si le code enseignant a été saisi dans cette session."""
+    return bool(st.session_state.get(_SESSION_KEY, False))
+
+
+def teacher_gate(title: str = "Espace enseignant") -> bool:
+    """
+    Demande le code, et renvoie `True` s'il est correct.
+
+    Ce code n'est **pas une sécurité** : il protège les réponses d'une classe
+    curieuse, rien de plus. Le vrai verrou est de ne pas publier le code, et de
+    le changer si l'application est déployée publiquement.
+    """
+    if is_teacher():
+        return True
+    st.markdown(f"### 🔒 {title}")
+    st.caption(
+        "Cette section est réservée à l'enseignant. Saisissez le code pour y accéder."
+    )
+    code = st.text_input("Code enseignant", type="password", key=f"gate_{title}")
+    if code:
+        if code.strip() == TEACHER_CODE:
+            st.session_state[_SESSION_KEY] = True
+            st.success("Code accepté.")
+            st.rerun()
+        else:
+            st.error("Code incorrect.")
+    return False
+
+
+def lock_button() -> None:
+    """Bouton de reverrouillage, affiché dans la barre latérale."""
+    if is_teacher():
+        st.sidebar.success("Mode enseignant actif")
+        if st.sidebar.button("🔒 Verrouiller", use_container_width=True):
+            st.session_state[_SESSION_KEY] = False
+            st.rerun()
 
 CSS = """
 <style>
@@ -86,15 +138,31 @@ def method_note(title: str, body: str) -> None:
 
 
 def show_steps(steps) -> None:
-    """Affiche la progression d'une activité, réponse attendue repliée."""
+    """
+    Affiche la progression d'une activité.
+
+    La réponse attendue reste masquée tant que le code enseignant n'a pas été
+    saisi : les élèves doivent d'abord chercher, ce qui est l'intérêt pédagogique.
+    """
     for i, step in enumerate(steps, start=1):
         with st.expander(f"Étape {i} — {step.title}", expanded=(i == 1)):
             st.write(step.instruction)
             if step.hint:
                 st.caption(f"💡 Piste : {step.hint}")
-            with st.container():
-                if st.button("Afficher la réponse attendue", key=f"rep_{id(steps)}_{i}"):
-                    st.success(step.expected)
+
+            if is_teacher():
+                with st.container():
+                    st.success("**Réponse attendue** — " + step.expected)
+            else:
+                locked = st.button(
+                    "🔒 Voir la réponse (code enseignant requis)",
+                    key=f"rep_{id(steps)}_{i}",
+                )
+                if locked:
+                    st.info(
+                        "Cette réponse est réservée à l'enseignant. Cherchez d'abord "
+                        "par vous-même, puis demandez-lui de vous la communiquer."
+                    )
 
 
 def indices_table(indices: list[analysis.ClimateIndex]) -> None:
