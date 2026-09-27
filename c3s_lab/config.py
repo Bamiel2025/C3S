@@ -18,6 +18,7 @@ sources, par ordre de priorité, sans jamais l'écrire sur le disque.
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -29,13 +30,51 @@ from typing import Any
 #: Racine du projet (dossier contenant `app.py`).
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+
+def _writable_dir(candidates: list[Path]) -> tuple[Path, bool]:
+    """
+    Choisit le premier dossier réellement inscriptible parmi `candidates`.
+
+    Sur un hébergeur (Streamlit Community Cloud, Vercel, Heroku…), le code du
+    projet est monté en lecture seule : écrire le cache NetCDF à côté du code
+    échoue, et l'application ne démarre pas du tout. On bascule alors vers un
+    dossier temporaire inscriptible.
+    """
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            probe = candidate / ".ecriture_test"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink()
+            return candidate, candidate == candidates[0]
+        except OSError:
+            continue
+    # Dernier recours : le dossier temporaire du système, toujours inscriptible.
+    fallback = Path(tempfile.gettempdir()) / "c3s_lab"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback, False
+
+
 #: Dossier de travail : cache NetCDF, fonds de carte, exports.
-DATA_DIR = Path(os.environ.get("C3S_LAB_DATA_DIR", PROJECT_ROOT / "data"))
+#: Surchargeable par la variable d'environnement `C3S_LAB_DATA_DIR`.
+DATA_DIR, DATA_DIR_IS_DEFAULT = _writable_dir(
+    [
+        Path(os.environ["C3S_LAB_DATA_DIR"])
+        if os.environ.get("C3S_LAB_DATA_DIR")
+        else PROJECT_ROOT / "data",
+        Path(tempfile.gettempdir()) / "c3s_lab",
+    ]
+)
+
+#: Vrai lorsque l'application tourne sur un système de fichiers en lecture seule
+#: et utilise donc un cache temporaire (donc non partagé entre les sessions).
+IS_READONLY_DEPLOYMENT = not DATA_DIR_IS_DEFAULT
+
 CACHE_DIR = DATA_DIR / "cache"
 MAPS_DIR = DATA_DIR / "maps"
 EXPORT_DIR = DATA_DIR / "exports"
 
-for _d in (DATA_DIR, CACHE_DIR, MAPS_DIR, EXPORT_DIR):
+for _d in (CACHE_DIR, MAPS_DIR, EXPORT_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 

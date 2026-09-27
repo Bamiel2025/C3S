@@ -1,0 +1,24 @@
+# ==========================================================================
+#  Configuration Streamlit
+#  Utilisee pour le deploiement (Streamlit Community Cloud) comme en local.
+# ==========================================================================
+
+[server]
+# La tache est lancee en arriere-plan : le navigateur peut s'armer tranquille.
+headless = true
+# L'ecriture des journaux reste dans le dossier temporaire, inscriptible
+# meme quand le code du projet est monte en lecture seule.
+enableCORS = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#2a9d8f"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f7fb"
+textColor = "#1f2933"
+font = "sans serif"
+
+[runner]
+fastReruns = true

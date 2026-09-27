@@ -202,6 +202,13 @@ def sidebar_controls() -> dict[str, Any]:
         st.title("🌍 C3S Climate Lab")
         st.caption("Données climatiques Copernicus pour le cycle 4")
 
+        if config.IS_READONLY_DEPLOYMENT:
+            st.info(
+                "☁️ **Déploiement en ligne** — les données téléchargées sont mises en "
+                "cache dans un dossier temporaire, non conservé entre les sessions. "
+                "La première requête de chaque séance sera donc plus lente."
+            )
+
         cfg = config.resolve_cds_config(
             st.session_state.get("cds_url"), st.session_state.get("cds_key")
         )
