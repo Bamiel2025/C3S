@@ -19,9 +19,10 @@ clé en main calées sur les programmes de cycle 4.
 6. [Les jeux de données utilisés](#6-les-jeux-de-données-utilisés)
 7. [Choix méthodologiques](#7-choix-méthodologiques)
 8. [Mode simulation](#8-mode-simulation)
-9. [Structure du projet](#9-structure-du-projet)
-10. [Dépannage](#10-dépannage)
-11. [Citer les données](#11-citer-les-données)
+9. [Déploiement en ligne](#9-déploiement-en-ligne)
+10. [Structure du projet](#10-structure-du-projet)
+11. [Dépannage](#11-dépannage)
+12. [Citer les données](#12-citer-les-données)
 
 ---
 
@@ -267,7 +268,60 @@ Pour basculer vers les données réelles, il suffit de configurer la clé : l'op
 
 ---
 
-## 9. Structure du projet
+## 9. Déploiement en ligne
+
+### Streamlit Community Cloud (recommandé)
+
+Déploiement en trois clics, sans configuration.
+
+1. Connectez-vous sur <https://share.streamlit.io> avec votre compte GitHub.
+2. *New app* → sélectionnez le dépôt `Bamiel2025/C3S` → **Deploy**.
+3. Dans *Settings → Secrets*, ajoutez :
+
+   ```
+   CDSAPI_KEY = <votre jeton d'accès personnel>
+   CDSAPI_URL = https://cds.climate.copernicus.eu/api
+   ```
+
+L'application lit ces variables automatiquement (priorité 2 dans l'ordre de
+recherche). Sans elles, elle démarre en mode simulation — ce qui reste utile
+pour présenter l'interface à une classe.
+
+L'URL publique obtenue est partageable telle quelle aux élèves.
+
+### Pourquoi pas Vercel ?
+
+Streamlit Communique avec le navigateur par **WebSockets** (serveur Tornado).
+Or les fonctions serverless de Vercel ne gèrent les WebSockets que sur les
+offres payantes avec *Fluid compute*. Sur le plan gratuit, aucun contournement
+n'est possible.
+
+De plus, Vercel intercepte `app.py` comme point d'entrée d'une fonction
+Python, et exige qu'elle exporte une variable `app`, `application` ou `handler`
+de type ASGI/WSGI — ce qu'un script Streamlit ne peut pas faire.
+
+La vraie raison décisive : même avec un contournement, les requêtes ERA5
+prennent de 30 secondes à plusieurs minutes, alors que les fonctions serverless
+sont interrompues bien avant.
+
+### Contrainte de version de Python
+
+Le fichier `runtime.txt` épingle **Python 3.11**. Ce n'est pas arbitraire :
+`netCDF4` ne publie pas de roue binaire pour Python 3.12 et 3.13. Sans cet
+épinglage, `pip` tenterait de compiler la bibliothèque HDF5 depuis les sources,
+ce qui échoue ou prend très longtemps sur une plateforme de déploiement.
+
+### Système de fichiers en lecture seule
+
+Les plateformes de déploiement montent le code en lecture seule. L'application
+le détecte et bascule son cache vers un dossier temporaire inscriptible ; un
+message l'indique dans la barre latérale. Conséquence : le cache n'est pas
+conservé entre les sessions, la première requête de chaque séance est plus
+lente.
+
+---
+
+## 10. Structure du projet
 
 ```
 C3S/
@@ -310,7 +364,7 @@ exception. Résultats attendus : `14/14 tests sans exception` et
 
 ---
 
-## 10. Dépannage
+## 11. Dépannage
 
 **« Aucune clé CDS — mode simulation »**
 La clé n'a pas été détectée. Lancez `python verify_install.py` pour connaître
@@ -343,7 +397,7 @@ affichage sans contours.
 
 ---
 
-## 11. Citer les données
+## 12. Citer les données
 
 Dans tout travail scolaire ou publication utilisant ces figures :
 

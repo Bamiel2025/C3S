@@ -8,6 +8,21 @@
 #      .\install_cds_key.ps1          (Windows)
 # ==========================================================================
 
+# ==========================================================================
+#  C3S Climate Lab — dépendances Python
+#
+#  Installation :
+#      pip install -r requirements.txt
+#
+#  Puis configuration de la clé CDS :
+#      .\install_cds_key.ps1          (Windows)
+#
+#  ⚠️ VERSION DE PYTHON : 3.10 ou 3.11 impérativement (voir runtime.txt).
+#  netCDF4 ne publie pas de roue binaire pour Python 3.12 et 3.13 : sur ces
+#  versions, pip tenterait de compiler la bibliothèque HDF5 depuis les sources,
+#  ce qui échoue ou prend très longtemps sur les plateformes de déploiement.
+# ==========================================================================
+
 # --- Accès au Climate Data Store -------------------------------------------
 cdsapi>=0.7.2
 ecmwf-datastores-client>=0.5.0
