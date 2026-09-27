@@ -81,6 +81,17 @@ def point_series(
     return pd.Series(point.values, index=pd.to_datetime(da["time"].values))
 
 
+def plain_series(da) -> pd.Series:
+    """
+    Convertit un tableau de données sans dimension spatiale en série pandas.
+
+    Les séries déjà téléchargées pour une ville n'ont qu'une dimension temporelle :
+    il n'y a donc pas de point à extraire, et la série est reprise telle quelle.
+    """
+    values = da.squeeze(drop=True).values
+    return pd.Series(values, index=pd.to_datetime(da["time"].values))
+
+
 def box_series(da, lat: float, lon: float, half_size_deg: float = 0.25) -> pd.Series:
     """
     Moyenne sur une petite boîte autour d'un point.

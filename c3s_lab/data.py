@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from . import analysis, catalog, cds_client, config, demo, places
+from . import analysis, catalog, cds_client, config, demo, places, precomputed
 
 #: Facteur de conversion vers les unités affichées, par variable.
 UNIT_CONVERSION = {
@@ -61,7 +61,15 @@ class FetchResult:
     n_cells: int = 0
 
     def series_at(self, lat: float, lon: float, *, name: str = "valeur") -> pd.Series:
-        """Série temporelle en un point, par cellule la plus proche."""
+        """
+        Série temporelle en un point, par cellule la plus proche.
+
+        Les données déjà téléchargées sont des séries d'une seule ville, donc
+        sans dimension spatiale : la position demandée est alors sans effet et
+        la série est renvoyée telle quelle.
+        """
+        if "latitude" not in self.data.dims:
+            return analysis.plain_series(self.data).rename(name)
         return analysis.point_series(self.data, lat, lon).rename(name)
 
     def box_mean_at(self, lat: float, lon: float, radius: float = 0.25) -> pd.Series:
@@ -181,10 +189,13 @@ SHORT_NAMES: dict[str, str] = {
     "total_cloud_cover": "tcc",
     "snow_depth": "sd",
     "snowfall": "sf",
-    "10m_u_component_of_wind": "10u",
-    "10m_v_component_of_wind": "10v",
-    "100m_u_component_of_wind": "100u",
-    "100m_v_component_of_wind": "100v",
+    # Le CDS écrit le vent selon la convention ECMWF `u10` / `v10` (lettre
+    # d'abord), et non `10u` / `10v`. Confondre les deux rendait la variable
+    # introuvable dans le fichier téléchargé.
+    "10m_u_component_of_wind": "u10",
+    "10m_v_component_of_wind": "v10",
+    "100m_u_component_of_wind": "u100",
+    "100m_v_component_of_wind": "v100",
     "geopotential": "z",
     "temperature": "t",
     "relative_humidity": "r",
@@ -294,6 +305,83 @@ def _apply_file_units(da: xr.DataArray, variable: str) -> tuple[xr.DataArray, st
     # Unité inconnue dans le fichier : on se rabat sur la table des variables,
     # qui suppose les unités habituelles (kelvins pour la température).
     return _to_display_units(da, variable)
+
+
+# --------------------------------------------------------------------------- #
+# Séries déjà téléchargées
+# --------------------------------------------------------------------------- #
+
+#: Clé du fichier préparé correspondant à une variable mensuelle.
+PRECOMPUTED_BY_VARIABLE = {
+    "2m_temperature": "villes_temperature",
+    "total_precipitation": "villes_precipitations",
+}
+
+
+def _load_precomputed_city(place: places.Place, variable: str) -> pd.Series | None:
+    """
+    Série mensuelle déjà téléchargée pour une ville, ou `None`.
+
+    Permet d'afficher les graphiques d'une ville sans interroger le CDS, donc
+    sans le temps d'attente qui ferait perdre une classe.
+    """
+    key = PRECOMPUTED_BY_VARIABLE.get(variable)
+    if key is None or not precomputed.is_available(f"{key}.csv"):
+        return None
+    frame = precomputed.load(f"{key}.csv")
+    if frame is None or place.name not in frame.columns:
+        return None
+    return frame[place.name].dropna().rename(place.name)
+
+
+def fetch_city_series(
+    place: places.Place,
+    variable: str = "2m_temperature",
+    years: tuple[int, int] | None = None,
+) -> FetchResult:
+    """
+    Série mensuelle d'une ville, déjà téléchargée si possible.
+
+    On privilégie systématiquement le fichier préparé : il est versionné dans le
+    dépôt, donc disponible dès le premier affichage, en local comme en
+    déploiement. Le CDS n'est interrogé qu'en dernier recours, pour les
+    périodes que le fichier ne couvre pas.
+    """
+    series = _load_precomputed_city(place, variable)
+    if series is not None and (years is None or _covers(series.index, years)):
+        y0, y1 = (int(series.index[0].year), int(series.index[-1].year))
+        # On construit le tableau explicitement : `to_xarray` nommerait la
+        # dimension d'après la ville, or tout le code attend « time ».
+        array = xr.DataArray(
+            series.to_numpy(),
+            dims=("time",),
+            coords={"time": series.index.to_numpy()},
+            name="value",
+        )
+        return FetchResult(
+            data=array,
+            unit=UNIT_CONVERSION.get(variable, ("", 1.0, ""))[2],
+            source="Données préparées (download instantané)",
+            simulated=False,
+            request={},
+            variable=variable,
+            period=f"{y0}-{y1}",
+            n_cells=len(series),
+        )
+
+    result = fetch(
+        variable=variable,
+        years=years or (catalog.get("monthly_means").start_year, config.LAST_COMPLETE_YEAR),
+        area=(place.lat + 0.3, place.lon - 0.4, place.lat - 0.3, place.lon + 0.4),
+    )
+    return result
+
+
+def _covers(index: pd.DatetimeIndex, years: tuple[int, int]) -> bool:
+    """Vrai si la série couvre toute la période demandée."""
+    if len(index) == 0:
+        return False
+    return index[0].year <= years[0] and index[-1].year >= years[1]
 
 
 # --------------------------------------------------------------------------- #

@@ -3,7 +3,7 @@ Activités pédagogiques clé en main, rattachées aux programmes de cycle 4.
 
 Chaque activité est décrite par une fiche (`Activity`) que l'interface affiche et
 par une fonction de production (`build`) qui assemble les graphiques et les
-tableaux à projeter. Les activités couvrent les trois.entrypoints du programme :
+tableaux à projeter. Les activités couvrent les trois entrées du programme :
 
 * **Sciences de la vie et de la Terre** — climat, effet de serre, cycle de l'eau ;
 * **Physique-chimie** — température, changements d'état, pression atmosphérique ;
@@ -75,10 +75,10 @@ ACTIVITIES: list[Activity] = [
         default_places=("Brest", "Strasbourg", "Lyon", "Marseille"),
         steps=(
             Step(
-                title="1. Observer",
+                title="1. Décrire les courbes",
                 instruction=(
                     "Lancer l'activité avec Brest et Strasbourg. Décrire la forme des deux "
-                    "courbes : où sont les minimums ? les maximums ? Quelle est la ville "
+                    "courbes : où se situent les minimums et les maximums ? Quelle est la ville "
                     "la plus « plate » ?"
                 ),
                 expected=(
@@ -88,10 +88,10 @@ ACTIVITIES: list[Activity] = [
                 hint="Regardez l'écart entre le point le plus bas et le point le plus haut.",
             ),
             Step(
-                title="2. Mesurer",
+                title="2. Mesurer l'amplitude",
                 instruction=(
                     "Lire dans le tableau des indices l'amplitude thermique de chaque "
-                    "ville, et noter les valeurs dans un tableau commun à la classe."
+                    "ville, puis noter les valeurs dans un tableau commun à la classe."
                 ),
                 expected=(
                     "Brest ≈ 15 °C, Strasbourg ≈ 25 °C : une dizaine de degrés d'écart "
@@ -150,8 +150,8 @@ ACTIVITIES: list[Activity] = [
             Step(
                 title="1. Repérer les extrêmes",
                 instruction=(
-                    "Sélectionner Marseille et Dakar. Indiquer quel mois est le plus humide "
-                    "et lequel est le plus sec pour chacune des deux villes."
+                    "Sélectionner Marseille et Dakar. Comparer les douze mois des deux villes, "
+                    "puis indiquer le mois le plus humide et le mois le plus sec pour chacune."
                 ),
                 expected=(
                     "Dakar est humide en été (mousson) ; Marseille est sèche en été."
@@ -160,11 +160,12 @@ ACTIVITIES: list[Activity] = [
             Step(
                 title="2. Relier température et pluie",
                 instruction=(
-                    "Sur le diagramme ombrothermique, repérer les mois où la courbe des "
-                    "températures monte : que se passe-t-il pour les barres de pluie ?"
+                    "Sur le diagramme ombrothermique, repérer les mois où la température "
+                    "augmente. Décrire ce que deviennent les barres de pluie sur la même "
+                    "période, puis expliquer le lien entre les deux."
                 ),
                 expected=(
-                    "Quand la température monte, l'air peut contenir plus de vapeur d'eau : "
+                    "Quand la température augmente, l'air peut contenir plus de vapeur d'eau : "
                     "l'évaporation alimente la pluie. C'est le mécanisme de la mousson."
                 ),
                 hint="Reliez les mots « évaporation » et « condensation » aux deux courbes.",
@@ -218,10 +219,11 @@ ACTIVITIES: list[Activity] = [
                 hint="Que signifierait un écart de +2 °C si l'on ne disait pas par rapport à quoi ?",
             ),
             Step(
-                title="2. Lire le graphique",
+                title="2. Décrire l'évolution",
                 instruction=(
                     "Sur le diagramme en barres, repérer les années les plus chaudes et les "
-                    "plus froides. Le graphique monte-t-il ou descend-il globalement ?"
+                    "plus froides. Décrire l'évolution générale : la température "
+                    "augmente-t-elle ou diminue-t-elle sur l'ensemble de la période ?"
                 ),
                 expected=(
                     "La tendance est à la hausse malgré des années plus froides isolées : "
@@ -399,8 +401,9 @@ ACTIVITIES: list[Activity] = [
             Step(
                 title="1. Fixer un seuil",
                 instruction=(
-                    "Choisir un seuil de température maximale (par exemple 35 °C) et "
-                    "annoncer le nombre de jours que l'on s'attend à trouver."
+                    "Choisir une valeur de seuil pour la température maximale (par exemple "
+                    "35 °C), puis annoncer le nombre de jours que l'on s'attend à trouver "
+                    "sur la période choisie."
                 ),
                 expected=(
                     "L'élève doit formuler une hypothèse chiffrée avant de regarder le "
@@ -408,10 +411,10 @@ ACTIVITIES: list[Activity] = [
                 ),
             ),
             Step(
-                title="2. Compter",
+                title="2. Compter et vérifier",
                 instruction=(
-                    "Lancer le calcul et comparer le nombre obtenu à l'hypothèse. L'écart "
-                    "est-il important ?"
+                    "Lancer le comptage, puis comparer le nombre obtenu à l'hypothèse. "
+                    "L'écart est-il important ? Expliquer pourquoi."
                 ),
                 expected=(
                     "L'hypothèse est souvent trop basse : les élèves sous-estiment la "
@@ -421,8 +424,8 @@ ACTIVITIES: list[Activity] = [
             Step(
                 title="3. Changer de définition",
                 instruction=(
-                    "Exiger maintenant aussi un minimum nocturne supérieur à 20 °C, puis "
-                    "comparer les deux comptages."
+                    "Exiger maintenant aussi un minimum nocturne supérieur à 20 °C, "
+                    "recalculer, puis comparer les deux comptages."
                 ),
                 expected=(
                     "Le second comptage est plus faible : une journée très chaude suivie "
@@ -430,10 +433,10 @@ ACTIVITIES: list[Activity] = [
                 ),
             ),
             Step(
-                title="4. Débattre",
+                title="4. En déduire",
                 instruction=(
-                    "Le résultat dépend du seuil retenu. Que faudrait-il imposer pour qu'un "
-                    "nombre annoncé soit un indicateur solide ?"
+                    "Le résultat dépend du seuil retenu. En déduire ce qu'il faudrait "
+                    "imposer pour qu'un nombre annoncé constitue un indicateur solide."
                 ),
                 expected=(
                     "Un seuil unique, publié et identique pour toutes les villes, calculé "

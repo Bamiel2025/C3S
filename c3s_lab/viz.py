@@ -390,15 +390,19 @@ def trend_chart(
     height: int = 450,
 ) -> go.Figure:
     """Série temporelle avec droite de tendance et intervalle de variabilité."""
+    # La droite de tendance se calcule sur l'année. Selon l'appelant, l'index est
+    # soit une liste d'années, soit des dates mensuelles : on extrait l'année
+    # dans les deux cas. Sans cela, la conversion en `datetime64` lève une
+    # exception sur un index d'entiers, ce qui faisait échouer les fiches.
+    years = _year_values(series.index)
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
-            x=series.index, y=series.values, mode="lines+markers", name="valeurs observées",
+            x=years, y=series.values, mode="lines+markers", name="valeurs observées",
             line=dict(color=C_NEUTRAL, width=1.6), marker=dict(size=6),
-            hovertemplate="%{x|%d/%m/%Y}<br>%{y:.2f}<extra></extra>",
+            hovertemplate="année %{x}<br>%{y:.2f}<extra></extra>",
         )
     )
-    years = np.asarray(series.index, dtype="datetime64").astype("datetime64[Y]").astype(int) + 1970
     fig.add_trace(
         go.Scatter(
             x=years, y=trend.predict(years), mode="lines", name="tendance linéaire",
@@ -412,6 +416,25 @@ def trend_chart(
         height=height, **FR_LAYOUT,
     )
     return fig
+
+
+def _year_values(index) -> np.ndarray:
+    """
+    Années correspondant à un index de séries temporelles.
+
+    Accepte des années entières, des dates, ou des chaînes de dates. Les
+    trois formes apparaissent dans le projet : les moyennes annuelles portent un
+    index d'années, les séries mensuelles un index de dates.
+    """
+    values = np.asarray(index)
+    if np.issubdtype(values.dtype, np.datetime64):
+        return values.astype("datetime64[Y]").astype(int) + 1970
+    if np.issubdtype(values.dtype, np.integer):
+        return values.astype(int)
+    dates = pd.to_datetime(pd.Series(values), errors="coerce")
+    if dates.notna().all():
+        return dates.dt.year.to_numpy(dtype=int)
+    return values.astype(int)
 
 
 def ombrothermic_diagram(

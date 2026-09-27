@@ -53,6 +53,7 @@ FRENCH_CITIES: tuple[Place, ...] = (
     Place("Caen", 49.18, -0.37, 20, "Normandie", True, tag="climat océanique normand"),
     Place("Perpignan", 42.69, 2.90, 30, "Occitanie", True, tag="méditerranéen insulaire, été très sec"),
     Place("Annecy", 45.90, 6.13, 448, "Auvergne-Rhône-Alpes", False, tag="climat montagnard lacustre"),
+    Place("Aubagne", 43.29, 5.40, 120, "Provence-Alpes-Côte d'Azur", False, tag="méditerranéen continental, cuvette ; référence du réchauffement"),
 )
 
 
@@ -77,6 +78,7 @@ WORLD_CITIES: tuple[Place, ...] = (
     Place("Singapore", 1.35, 103.82, 15, "Asie du Sud-Est", True, "Singapour", tag="tropical humide, équatorial"),
     Place("Moscow", 55.75, 37.62, 156, "Europe de l'Est", False, "Russie", tag="continental très contrasté"),
     Place("Mexico", 19.43, -99.13, 2240, "Amérique du Nord", False, "Mexique", tag="altitude et saison des pluies"),
+    Place("Montréal", 45.50, -73.57, 36, "Québec", False, "Canada", tag="continental très contrasté, hivers très longs ; même latitude que Bordeaux"),
 )
 
 

@@ -612,7 +612,10 @@ def page_cartes() -> None:
 
     dataset_key, cds_id, variable = ui.dataset_picker("monthly_means")
     dataset = catalog.get(dataset_key)
-    years = ui.years_picker(dataset_key)
+    period = ui.years_picker(dataset_key)
+    if period is None:
+        return
+    y0, y1 = period
 
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
@@ -637,7 +640,7 @@ def page_cartes() -> None:
         result = _fetch(
             dataset_key=dataset_key,
             variable=variable,
-            years=years,
+            years=(y0, y1),
             area=area,
             months=[month] if month else None,
         )
@@ -663,7 +666,7 @@ def page_cartes() -> None:
         field,
         title=f"{variable_meta.label if variable_meta else variable} — {season_label.lower()}",
         unit=unit,
-        period=f"moyenne {years[0]}-{years[1]}",
+        period=f"moyenne {y0}-{y1}",
         area=area,
         colorscale=spec,
         zmin=zmin,
@@ -740,23 +743,29 @@ def page_graphiques() -> None:
         st.caption(f"📍 {place.lat:.2f}°N, {place.lon:.2f}°E — {place.region}"
                    f" · {place.tag}")
         area = (place.lat + 1.5, place.lon - 1.5, place.lat - 1.5, place.lon + 1.5)
-        years = ui.years_picker("monthly_means", (1991, 2024))
+        period = ui.years_picker("monthly_means", (1991, 2024))
+        if period is None:
+            return
+        y0, y1 = period
         result = _fetch(
             dataset_key="monthly_means", variable=variable,
-            years=years, area=area,
+            years=(y0, y1), area=area,
         )
         series = result.series_at(place.lat, place.lon, name=unit)
     else:
         area = {"Domaine (moyenne spatiale)": (51.5, -5.5, 41.0, 10.0),
                 "Europe": (72.0, -25.0, 33.0, 45.0),
                 "Hémisphère nord": (90.0, -180.0, 0.0, 180.0)}[scope_label]
-        years = ui.years_picker("monthly_means", (1979, 2024))
+        period = ui.years_picker("monthly_means", (1979, 2024))
+        if period is None:
+            return
+        y0, y1 = period
         st.caption(
             f"📍 {places.area_label(area)} — moyenne pondérée par le cosinus de la latitude."
         )
         result = _fetch(
             dataset_key="monthly_means", variable=variable,
-            years=years, area=area,
+            years=(y0, y1), area=area,
         )
         series = result.area_mean()
 
@@ -849,7 +858,10 @@ def page_villes() -> None:
         st.info("Choisissez au moins une ville pour lancer la comparaison.")
         st.stop()
 
-    years = ui.years_picker("monthly_means", reference)
+    period = ui.years_picker("monthly_means", reference)
+    if period is None:
+        return
+    y0, y1 = period
     st.caption(f"Normale de référence : {reference[0]}–{reference[1]}")
 
     # Un domaine englobant toutes les villes sélectionnées suffit : la valeur
@@ -861,11 +873,11 @@ def page_villes() -> None:
     with st.spinner("Récupération des données pour toutes les villes…"):
         temp = _fetch(
             dataset_key="monthly_means", variable="2m_temperature",
-            years=years, area=area,
+            years=(y0, y1), area=area,
         )
         precip = _fetch(
             dataset_key="monthly_means", variable="total_precipitation",
-            years=years, area=area,
+            years=(y0, y1), area=area,
         )
 
     ui.data_banner(temp)
@@ -1016,28 +1028,10 @@ def page_activites() -> None:
         _activity_figures(activity)
 
     st.divider()
-    st.subheader("Déroulé")
-    ui.show_steps(activity.steps)
+    st.subheader("Déroulé et corrigés")
+    ui.show_steps(activity.steps, activity.key)
 
-    st.divider()
-    if not ui.is_teacher():
-        with st.expander("🔒 Espace enseignant — codes et corrigés"):
-            st.caption(
-                "Les onglets *Accueil*, *Connexion CDS* et *Méthode* sont réservés. "
-                "Saisissez le code ci-dessous pour les débloquer ; vous les "
-                "reverrouillerez depuis la barre latérale."
-            )
-            code = st.text_input("Code enseignant", type="password", key="gate_activites")
-            if code:
-                if code.strip() == ui.TEACHER_CODE:
-                    st.session_state["teacher_unlocked"] = True
-                    st.success("Code accepté. Les onglets réservés apparaissent en bas "
-                               "du menu — rechargez la page pour les voir.")
-                    st.rerun()
-                else:
-                    st.error("Code incorrect.")
-
-    with st.expander("Fiche imprimable (PDF / impression)"):
+    with st.expander("📄 Fiche imprimable (PDF / impression)"):
         st.markdown(_activity_sheet(activity))
         st.download_button(
             "Télécharger la fiche (Markdown)",
@@ -1129,12 +1123,12 @@ def _figures_city_comparison(activity, reference) -> None:
         st.info("Aucune ville disponible pour cette activité.")
         return
     area = _bbox(cities, 1.5)
-    years = (reference[0], reference[1])
+    y0, y1 = reference
 
     temp = _fetch(dataset_key="monthly_means", variable="2m_temperature",
-                  years=years, area=area)
+                  years=(y0, y1), area=area)
     precip = _fetch(dataset_key="monthly_means", variable="total_precipitation",
-                    years=years, area=area)
+                    years=(y0, y1), area=area)
     ui.data_banner(temp)
 
     t_series = {p.name: temp.series_at(p.lat, p.lon, name=p.name) for p in cities}
@@ -1189,7 +1183,10 @@ def _figures_city_comparison(activity, reference) -> None:
 def _figures_warming(activity, reference) -> None:
     city = st.selectbox("Ville étudiée", [p.name for p in places.FRENCH_CITIES], index=0)
     place = next(p for p in places.FRENCH_CITIES if p.name == city)
-    y0, y1 = ui.years_picker("monthly_means", (1979, 2024))
+    period = ui.years_picker("monthly_means", (1979, 2024))
+    if period is None:
+        return
+    y0, y1 = period
     st.caption(
         f"📍 {place.lat:.2f}°N, {place.lon:.2f}°E — {place.region}. "
         f"Normale de référence : {reference[0]}–{reference[1]}."
@@ -1241,7 +1238,10 @@ def _figures_wind_pressure(activity, reference) -> None:
     )
     year = st.number_input("Année", min_value=1940, max_value=config.LAST_COMPLETE_YEAR,
                            value=2020, step=1)
-    y0, y1 = ui.years_picker("monthly_means", (year, year + 1))
+    period = ui.years_picker("monthly_means", (year, year + 1))
+    if period is None:
+        return
+    y0, y1 = period
     month_list = [month]
 
     mslp = _fetch(dataset_key="monthly_means", variable="mean_sea_level_pressure",
@@ -1306,7 +1306,10 @@ def _figures_maps(activity, reference) -> None:
     )
     year = st.number_input("Année", min_value=1940, max_value=config.LAST_COMPLETE_YEAR,
                            value=2020, step=1)
-    y0, y1 = ui.years_picker("monthly_means", (reference[0], reference[1]))
+    period = ui.years_picker("monthly_means", (reference[0], reference[1]))
+    if period is None:
+        return
+    y0, y1 = period
     month = st.selectbox(
         "Mois isolé", [0] + list(range(1, 13)),
         format_func=lambda m: "— toute l'année —" if m == 0 else analysis.MONTH_LABELS_LONG[m - 1],
@@ -1361,33 +1364,57 @@ def _figures_heatwave(activity, reference) -> None:
     pédagogique central, d'où les deux définitions comparées.
     """
     cities = _activity_cities(activity) or list(places.FRENCH_CITIES[:3])
-    area = _bbox(cities, 1.0)
     col1, col2 = st.columns(2)
     with col1:
-        y0, y1 = ui.years_picker("daily_stats", (2015, config.LAST_COMPLETE_YEAR))
+        period = ui.years_picker("daily_stats", (2015, config.LAST_COMPLETE_YEAR))
+        if period is None:
+            return
+        y0, y1 = period
     with col2:
         tmax_thresh = st.slider("Seuil de température maximale (°C)", 25.0, 42.0, 35.0, 0.5)
 
-    tmax = _fetch(dataset_key="daily_stats", variable="maximum_2m_temperature",
-                  years=(y0, y1), area=area, daily_statistic="daily_maximum")
-    tmin = _fetch(dataset_key="daily_stats", variable="minimum_2m_temperature",
-                  years=(y0, y1), area=area, daily_statistic="daily_minimum")
-    ui.data_banner(tmax)
-    if tmax.simulated:
-        st.info(
-            "**Comptage illustratif.** L'amplitude des extrêmes du jeu simulé "
-            "n'est pas calibrée : ces nombres servent à comprendre la méthode, "
-            "pas à établir un résultat. Passez aux données CDS pour chiffrer."
-        )
+    # Le CDS applique déjà la statistique journalière à la variable 2 m. Demander
+    # `maximum_2m_temperature` en plus est redondant et double le coût de la
+    # requête, ce qui déclenche le refus « cost limits exceeded » sur les
+    # périodes longues. Une seule variable par requête suffit.
+    #
+    # Surtout, le coût croît avec le nombre de cellules : une requête couvrant
+    # Paris, Brest et Marseille à la fois est refusée. On interroge donc chaque
+    # ville séparément, sur une boîte d'un demi-degré, ce qui reste très en deçà
+    # du plafond et garde une requête par ville et par statistique.
+    with st.spinner("Comptage des jours de chaleur…"):
+        series_max: dict[str, pd.Series] = {}
+        series_min: dict[str, pd.Series] = {}
+        banner = None
+        for place in cities:
+            area = (place.lat + 0.3, place.lon - 0.3, place.lat - 0.3, place.lon + 0.3)
+            tmax = _fetch(dataset_key="daily_stats", variable="2m_temperature",
+                          years=(y0, y1), area=area,
+                          daily_statistic="daily_maximum")
+            tmin = _fetch(dataset_key="daily_stats", variable="2m_temperature",
+                          years=(y0, y1), area=area,
+                          daily_statistic="daily_minimum")
+            banner = banner or tmax
+            series_max[place.name] = tmax.series_at(place.lat, place.lon, name="T max")
+            series_min[place.name] = tmin.series_at(place.lat, place.lon, name="T min")
+
+    if banner is not None:
+        ui.data_banner(banner)
+        if banner.simulated:
+            st.info(
+                "**Comptage illustratif.** L'amplitude des extrêmes du jeu simulé "
+                "n'est pas calibrée : ces nombres servent à comprendre la méthode, "
+                "pas à établir un résultat. Passez aux données CDS pour chiffrer."
+            )
 
     rows = []
     for place in cities:
-        series_max = tmax.series_at(place.lat, place.lon, name="tmax")
-        series_min = tmin.series_at(place.lat, place.lon, name="tmin")
-        simple = analysis.count_days_above(series_max, tmax_thresh)
-        nights = analysis.count_nights_above(series_min, 20.0)
+        tmax_city = series_max[place.name]
+        tmin_city = series_min[place.name]
+        simple = analysis.count_days_above(tmax_city, tmax_thresh)
+        nights = analysis.count_nights_above(tmin_city, 20.0)
         strict = analysis.heatwave_days(
-            series_max, series_min, tmax_thresh=tmax_thresh, tmin_thresh=20.0
+            tmax_city, tmin_city, tmax_thresh=tmax_thresh, tmin_thresh=20.0
         )
         rows.append(
             {
@@ -1402,11 +1429,10 @@ def _figures_heatwave(activity, reference) -> None:
 
     city = st.selectbox("Ville pour la courbe annuelle", [p.name for p in cities])
     place = next(p for p in cities if p.name == city)
-    series_max = tmax.series_at(place.lat, place.lon, name="T max")
-    series_min = tmin.series_at(place.lat, place.lon, name="T min")
-    simple = analysis.count_days_above(series_max, tmax_thresh)
+    simple = analysis.count_days_above(series_max[place.name], tmax_thresh)
     strict = analysis.heatwave_days(
-        series_max, series_min, tmax_thresh=tmax_thresh, tmin_thresh=20.0
+        series_max[place.name], series_min[place.name],
+        tmax_thresh=tmax_thresh, tmin_thresh=20.0,
     )
     ui.show_figure(
         viz.time_series(

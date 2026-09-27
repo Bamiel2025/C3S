@@ -20,9 +20,10 @@ clé en main calées sur les programmes de cycle 4.
 7. [Choix méthodologiques](#7-choix-méthodologiques)
 8. [Mode simulation](#8-mode-simulation)
 9. [Déploiement en ligne](#9-déploiement-en-ligne)
-10. [Structure du projet](#10-structure-du-projet)
-11. [Dépannage](#11-dépannage)
-12. [Citer les données](#12-citer-les-données)
+10. [Fiches HTML autonomes](#10-fiches-html-autonomes)
+11. [Structure du projet](#11-structure-du-projet)
+12. [Dépannage](#12-dépannage)
+13. [Citer les données](#13-citer-les-données)
 
 ---
 
@@ -281,6 +282,7 @@ Déploiement en trois clics, sans configuration.
    ```
    CDSAPI_KEY = <votre jeton d'accès personnel>
    CDSAPI_URL = https://cds.climate.copernicus.eu/api
+   C3S_TEACHER_CODE = <votre code, si vous ne souhaitez pas laisser 2027 en clair>
    ```
 
 L'application lit ces variables automatiquement (priorité 2 dans l'ordre de
@@ -288,6 +290,34 @@ recherche). Sans elles, elle démarre en mode simulation — ce qui reste utile
 pour présenter l'interface à une classe.
 
 L'URL publique obtenue est partageable telle quelle aux élèves.
+
+### Le champ « Main file path »
+
+Streamlit Community Cloud affiche un champ **Main file path** pré-rempli avec
+`streamlit_app.py`, et signale *« This file does not exist »* si ce fichier
+est absent du dépôt. C'est le cas le plus courant : `streamlit_app.py` est le
+nom de fichier **par défaut** de la plateforme, pas une obligation technique.
+
+Deux solutions, au choix :
+
+| Solution | Ce qu'il faut faire |
+|---|---|
+| **Recommandée** | Ne rien changer : le dépôt contient `streamlit_app.py`, qui délègue à `app.py`. Le champ reste sur sa valeur par défaut. |
+| Alternative | Saisir `app.py` à la place de `streamlit_app.py` dans le champ, **avec le dossier du dépôt bien spécifié** au-dessus. |
+
+Le dépôt fournit `streamlit_app.py` pour éviter l'erreur : il ne contient que
+deux lignes utiles, qui évitent d'avoir à se souvenir du chemin.
+
+```python
+# streamlit_app.py
+import app
+
+app.main()
+```
+
+> Si vous déployez en copiant manuellement des fichiers plutôt que le dépôt
+> GitHub, vérifiez que `streamlit_app.py` se trouve **à la racine** du dépôt :
+> c'est sa racine qui est analysée, pas le dossier où vous vous situez.
 
 ### Pourquoi pas Vercel ?
 
@@ -321,7 +351,60 @@ lente.
 
 ---
 
-## 10. Structure du projet
+## 10. Fiches HTML autonomes
+
+En plus de l'application en ligne, le projet produit **dix fiches HTML
+autonomes** : chaque activité devient un fichier unique contenant ses
+graphiques, ses cartes, ses consignes et ses réponses attendues. Ces fichiers
+s'ouvrent sans connexion ni installation — sur un vidéoprojecteur, une clé USB
+ou par courriel aux familles.
+
+```bash
+python export_activities.py          # les dix fiches + la page d'accueil
+python export_activities.py 08 09    # seulement celles qui commencing par 08, 09
+```
+
+Les fichiers sont écrits dans `activites_html/`. Ouvrez `index.html` pour la
+liste complète.
+
+| Fiche | Activité |
+|---|---|
+| `01_ocean_continent` | Océan ou continent : amplitude thermique |
+| `02_cycle_eau` | Le cycle de l'eau et les précipitations |
+| `03_rechauffement_climatique` | Mesurer le réchauffement climatique |
+| `04_pression_vent` | Pression atmosphérique et circulation du vent |
+| `05_cartes_climatiques` | Construire et lire une carte climatique |
+| `06_canicule` | Compter les jours de chaleur |
+| `07_latitude_rayonnement` | Latitude et bilan radiatif |
+| `08_bordeaux_montreal` | **Bordeaux et Montréal : mêmes latitudes, climats opposés** |
+| `09_meteo_climat` | **Météorologie et climatologie** |
+| `10_origine_rechauffement` | **Origine et causes du réchauffement (Aubagne)** |
+
+Toutes les fiches sont th **Sciences de la vie et de la Terre**, avec les
+graphiques et cartes issus de vraies données ERA5 téléchargées sur le CDS.
+
+### Corrigés masqués
+
+Les réponses attendues sont **repliées** dans chaque fiche : la fiche peut être
+projetée aux élèves sans risque. Deux moyens de tout déplier :
+
+- le bouton en haut de la fiche ;
+- l'ajout de `?corriges=1` à l'adresse du fichier.
+
+### Préparation préalable
+
+Ces fiches utilisent des données réelles. Avant la première génération, il faut
+pré-télécharger les séries utilisées, sans quoi chaque fiche déclencherait des
+requêtes au CDS — lentes, et comptabilisées dans votre quota quotidien :
+
+```bash
+python prepare_data.py
+```
+
+Le rendu des images demande **Kaleido** (`pip install kaleido`), déjà présent
+dans `requirements.txt`.
+
+## 11. Structure du projet
 
 ```
 C3S/
@@ -364,7 +447,7 @@ exception. Résultats attendus : `14/14 tests sans exception` et
 
 ---
 
-## 11. Dépannage
+## 12. Dépannage
 
 **« Aucune clé CDS — mode simulation »**
 La clé n'a pas été détectée. Lancez `python verify_install.py` pour connaître
@@ -397,7 +480,7 @@ affichage sans contours.
 
 ---
 
-## 12. Citer les données
+## 13. Citer les donn
 
 Dans tout travail scolaire ou publication utilisant ces figures :
 

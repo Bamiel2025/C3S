@@ -27,12 +27,12 @@ from . import analysis, catalog, config, data, places
 TEACHER_CODE = os.environ.get("C3S_TEACHER_CODE", "2027")
 
 #: Clé de session mémorisant la validation du code.
-_SESSION_KEY = "teacher_unlocked"
+SESSION_KEY = "teacher_unlocked"
 
 
 def is_teacher() -> bool:
     """Vrai si le code enseignant a été saisi dans cette session."""
-    return bool(st.session_state.get(_SESSION_KEY, False))
+    return bool(st.session_state.get(SESSION_KEY, False))
 
 
 def teacher_gate(title: str = "Espace enseignant") -> bool:
@@ -52,7 +52,7 @@ def teacher_gate(title: str = "Espace enseignant") -> bool:
     code = st.text_input("Code enseignant", type="password", key=f"gate_{title}")
     if code:
         if code.strip() == TEACHER_CODE:
-            st.session_state[_SESSION_KEY] = True
+            st.session_state[SESSION_KEY] = True
             st.success("Code accepté.")
             st.rerun()
         else:
@@ -65,7 +65,7 @@ def lock_button() -> None:
     if is_teacher():
         st.sidebar.success("Mode enseignant actif")
         if st.sidebar.button("🔒 Verrouiller", use_container_width=True):
-            st.session_state[_SESSION_KEY] = False
+            st.session_state[SESSION_KEY] = False
             st.rerun()
 
 CSS = """
@@ -137,13 +137,48 @@ def method_note(title: str, body: str) -> None:
     st.markdown(f'<div class="c3s-method"><h4>{title}</h4>{body}</div>', unsafe_allow_html=True)
 
 
-def show_steps(steps) -> None:
+def code_gate(key: str, label: str = "Code enseignant") -> bool:
     """
-    Affiche la progression d'une activité.
+    Demande le code enseignant et mémorise sa validation dans la session.
 
-    La réponse attendue reste masquée tant que le code enseignant n'a pas été
-    saisi : les élèves doivent d'abord chercher, ce qui est l'intérêt pédagogique.
+    Renvoie `True` dès que le code est correct. L'enseignant reste ensuite
+    déverrouillé pour toute la session, sur toutes les pages : les onglets
+    réservés et les corrigés deviennent accessibles sans ressaisie.
     """
+    code = st.text_input(
+        label, type="password", key=f"code_{key}", placeholder="Code enseignant"
+    )
+    if not code:
+        return False
+    if code.strip() == TEACHER_CODE:
+        st.session_state[SESSION_KEY] = True
+        st.success("Code accepté : les réponses attendues sont affichées.")
+        st.rerun()
+    st.error("Code incorrect.")
+    return False
+
+
+def show_steps(steps, activity_key: str = "") -> None:
+    """
+    Affiche la progression d'une activité, réponses masquées pour les élèves.
+
+    Un onglet unique en tête permet à l'enseignant de saisir le code : les
+    réponses attendues de toutes les étapes apparaissent alors, et les onglets
+    réservés du menu également. Sans ce code, un élève peut cliquer sur « Voir la
+    réponse » d'une étape, ce qui lui ouvre le même champ de saisie.
+    """
+    prefix = activity_key or str(id(steps))
+
+    with st.expander("🔑 Code enseignant — afficher les réponses attendues"):
+        st.caption(
+            "Saisissez le code pour débloquer les corrigés de cette activité et les "
+            "onglets *Accueil*, *Connexion CDS* et *Méthode* du menu."
+        )
+        if not is_teacher():
+            code_gate(f"gate_{prefix}")
+        else:
+            st.success("Mode enseignant actif : toutes les réponses sont affichées.")
+
     for i, step in enumerate(steps, start=1):
         with st.expander(f"Étape {i} — {step.title}", expanded=(i == 1)):
             st.write(step.instruction)
@@ -151,18 +186,29 @@ def show_steps(steps) -> None:
                 st.caption(f"💡 Piste : {step.hint}")
 
             if is_teacher():
-                with st.container():
-                    st.success("**Réponse attendue** — " + step.expected)
+                st.success(f"**Réponse attendue** — {step.expected}")
             else:
-                locked = st.button(
-                    "🔒 Voir la réponse (code enseignant requis)",
-                    key=f"rep_{id(steps)}_{i}",
+                st.button(
+                    "🔒 Voir la réponse", key=f"btn_reponse_{prefix}_{i}",
                 )
-                if locked:
-                    st.info(
-                        "Cette réponse est réservée à l'enseignant. Cherchez d'abord "
-                        "par vous-même, puis demandez-lui de vous la communiquer."
-                    )
+                st.caption(
+                    "Réservé à l'enseignant : le code se saisit dans l'onglet "
+                    "« Code enseignant » ci-dessus."
+                )
+
+    with st.expander(f"📚 Corrigé complet de l'activité ({len(steps)} étapes)"):
+        st.caption(
+            "Les consignes et les réponses attendues, étape par étape, pour "
+            "préparer votre séance ou corriger en fin de cours."
+        )
+        if is_teacher():
+            for i, step in enumerate(steps, start=1):
+                st.markdown(f"**Étape {i} — {step.title}**")
+                st.write(step.instruction)
+                st.success(step.expected)
+                st.divider()
+        else:
+            code_gate(f"corrige_{prefix}")
 
 
 def indices_table(indices: list[analysis.ClimateIndex]) -> None:
@@ -354,11 +400,22 @@ def dataset_picker(default: str = "monthly_means") -> tuple[str, str, str]:
     return dataset_key, dataset.id, variable
 
 
-def years_picker(dataset_key: str, default: tuple[int, int] = (1991, 2020)) -> tuple[int, int]:
-    """Sélecteur de période, borné par la disponibilité du jeu de données."""
+def years_picker(
+    dataset_key: str, default: tuple[int, int] = (1991, 2020)
+) -> tuple[int, int] | None:
+    """
+    Sélecteur de période, borné par la disponibilité du jeu de données.
+
+    Renvoie `None` si la période demandée est incohérente, au lieu d'interrompre
+    la page : un `st.stop()` ici faisait disparaître silencieusement toutes les
+    figures de l'activité, sans message d'erreur.
+    """
     dataset = catalog.get(dataset_key)
     start = max(dataset.start_year, 1940)
     end = config.LAST_COMPLETE_YEAR
+    if end - start < 1:
+        st.error("Ce jeu de données ne couvre pas de période exploitable.")
+        return None
     col1, col2 = st.columns(2)
     with col1:
         y0 = st.number_input(
@@ -371,8 +428,11 @@ def years_picker(dataset_key: str, default: tuple[int, int] = (1991, 2020)) -> t
             value=max(start + 1, min(default[1], end)), step=1,
         )
     if y0 >= y1:
-        st.error("L'année de début doit précéder l'année de fin.")
-        st.stop()
+        st.error(
+            "La période demandée est vide : l'année de début doit précéder "
+            "l'année de fin."
+        )
+        return None
     return int(y0), int(y1)
 
 

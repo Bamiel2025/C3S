@@ -36,6 +36,8 @@ pandas>=2.0
 
 # --- Rendu des graphiques et des cartes -------------------------------------
 plotly>=5.20
+# Rendu des fiches HTML autonomes en images (cf. export_activities.py)
+kaleido>=0.2.1
 matplotlib>=3.7
 
 # --- Géométrie (utilisée par les fonds de carte) ----------------------------
