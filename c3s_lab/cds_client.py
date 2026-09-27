@@ -232,7 +232,9 @@ def diagnose_key(key: str) -> KeyDiagnosis:
         return KeyDiagnosis(
             False, "valeur d'exemple",
             "La valeur saisie ressemble à un exemple de documentation, pas à un jeton réel.",
-            "Copiez la valeur exacte affichée sur la page de votre profil CDS.",
+            "Collez le jeton affiché dans la section « Set up the CDS API personal "
+            "access token » de votre profil : "
+            "https://cds.climate.copernicus.eu/user",
         )
 
     if ":" in value:

@@ -237,10 +237,16 @@ def local_secret_hint() -> str:
 def cloud_secret_hint() -> str:
     """Rappel des noms de secrets attendus sur un hébergeur."""
     return (
-        "Dans **Settings → Secrets**, ajoutez exactement ces deux entrées :\n\n"
+        "Dans **Settings → Secrets**, ajoutez ces deux lignes. Recopiez "
+        "`CDSAPI_URL` tel quel ; pour `CDSAPI_KEY`, collez le jeton affiché sur "
+        "votre profil CDS, dans la section *« Set up the CDS API personal access "
+        "token »* de **https://cds.climate.copernicus.eu/user** :\n\n"
         '```toml\nCDSAPI_URL = "https://cds.climate.copernicus.eu/api"\n'
-        'CDSAPI_KEY = "<votre jeton d\'accès personnel>"\n```\n\n'
-        "Le jeton se trouve sur votre profil CDS, dans la rubrique **API Access**. "
+        'CDSAPI_KEY = "COLLEZ-ICI-VOTRE-JETON-PERSONNEL"\n```\n\n'
+        "`COLLEZ-ICI-VOTRE-JETON-PERSONNEL` est un exemple, pas un jeton : il sera "
+        "refusé, ce qui est normal. Le vrai jeton ressemble à `a1b2c3d4-…`.\n\n"
+        "Ce n'est pas le *Client ID* ni le *Client secret* de votre compte ECMWF : "
+        "ils appartiennent à l'API Web ECMWF et sont rejetés par le CDS.\n\n"
         "Après avoir enregistré, redémarrez l'application "
         "(*Manage app → Restart*) : les secrets ne sont lus qu'au démarrage."
     )

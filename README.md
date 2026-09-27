@@ -326,18 +326,26 @@ ne sont pas versionnés** (voir `.gitignore`) : c'est volontaire, pour qu'aucun
 jeton ne soit publié. Sur un déploiement, ils sont donc absents, et la clé doit
 être déclarée par l'administrateur.
 
-Dans **Settings → Secrets** de Streamlit Community Cloud, ajoutez :
+Dans **Settings → Secrets** de Streamlit Community Cloud, ajoutez ces deux
+lignes. `CDSAPI_URL` est à recopier tel quel ; pour `CDSAPI_KEY`, **collez le
+jeton de votre profil** à l'endroit indiqué :
 
 ```toml
 CDSAPI_URL = "https://cds.climate.copernicus.eu/api"
-CDSAPI_KEY = "<votre jeton d'accès personnel>"
+CDSAPI_KEY = "COLLEZ-ICI-VOTRE-JETON-PERSONNEL"
 ```
 
-Puis **Manage app → Restart** : les secrets ne sont lus qu'au démarrage.
+> ⚠️ `COLLEZ-ICI-VOTRE-JETON-PERSONNEL` est un **exemple**, pas un jeton. Si vous
+> le laissez tel quel, l'application le refusera avec un message explicite — c'est
+> voulu, pour éviter de croire à une configuration réussie alors qu'elle ne l'est
+> pas.
 
-> Les noms sont sensibles à la casse et ne doivent pas contenir d'espace. Un
-> `CDSAPI_KEY` écrit avec des guillemets simples, ou `CDS API KEY`, sera ignoré
-> silencieusement — l'application basculera alors en mode simulation.
+Le jeton se trouve sur **https://cds.climate.copernicus.eu/user**, dans la
+section *« Set up the CDS API personal access token »*. C'est une longue chaîne
+ressemblant à `a1b2c3d4-...`. Ce n'est **pas** le *Client ID* ni le *Client
+secret* de votre compte ECMWF, qui servent à l'API Web ECMWF et sont refusés.
+
+Puis **Manage app → Restart** : les secrets ne sont lus qu'au démarrage.
 
 Tant que la clé manque, la barre latérale l'affiche clairement, et l'onglet
 *Connexion CDS* reste inaccessible aux élèves : c'est normal et sans risque.
