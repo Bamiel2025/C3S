@@ -207,15 +207,79 @@ class CDSConfig:
         return f"url: {self.url}\nkey: {self.key}\n"
 
 
+def deployment_kind() -> str:
+    """
+    Détermine dans quel contexte l'application s'exécute.
+
+    Les deux situations n'appellent pas la même procédure de configuration de la
+    clé CDS : en local on écrit un fichier, sur un hébergeur on passe par les
+    *Secrets* de la plateforme. Sans cette distinction, le message affiché ne dit
+    pas à l'enseignant où agir.
+    """
+    for marker in ("STREAMLIT_APP_URL", "STREAMLIT_RUNTIME", "STREAMLIT_HOST"):
+        if os.environ.get(marker):
+            return "cloud"
+    for marker in ("DYNO", "RENDER", "RAILWAY_ENVIRONMENT", "FLY_APP_NAME"):
+        if os.environ.get(marker):
+            return "cloud"
+    return "local"
+
+
+def local_secret_hint() -> str:
+    """Rappel des noms attendus, pour une configuration manuelle."""
+    return (
+        "Les noms attendus sont **CDSAPI_URL** et **CDSAPI_KEY**, sans espace ni "
+        "guillemets superflus : c'est ainsi que la plateforme les transmet à "
+        "l'application."
+    )
+
+
+def cloud_secret_hint() -> str:
+    """Rappel des noms de secrets attendus sur un hébergeur."""
+    return (
+        "Dans **Settings → Secrets**, ajoutez exactement ces deux entrées :\n\n"
+        '```toml\nCDSAPI_URL = "https://cds.climate.copernicus.eu/api"\n'
+        'CDSAPI_KEY = "<votre jeton d\'accès personnel>"\n```\n\n'
+        "Le jeton se trouve sur votre profil CDS, dans la rubrique **API Access**. "
+        "Après avoir enregistré, redémarrez l'application "
+        "(*Manage app → Restart*) : les secrets ne sont lus qu'au démarrage."
+    )
+
+
+def _streamlit_secret(name: str) -> str | None:
+    """
+    Lit un secret depuis `st.secrets`, ou renvoie `None`.
+
+    L'import de Streamlit est local et protégé : `config.py` est aussi utilisé
+    par les scripts en ligne de commande (`prepare_data.py`, `export_activities.py`),
+    où aucun contexte Streamlit n'existe. `st.secrets` lève alors une exception
+    qu'il ne faut surtout pas laisser remonter.
+    """
+    try:
+        import streamlit as st
+    except Exception:  # noqa: BLE001 - Streamlit est optionnel hors application
+        return None
+    try:
+        value = st.secrets.get(name)  # type: ignore[union-attr]
+    except Exception:  # noqa: BLE001 - aucun contexte / aucun secret configuré
+        return None
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def resolve_cds_config(override_url: str | None = None, override_key: str | None = None) -> CDSConfig:
     """
     Recherche la configuration CDS, par ordre de priorité décroissante.
 
     1. Saisie directe dans l'application (jamais écrite sur disque) ;
-    2. Variables d'environnement `CDSAPI_URL` / `CDSAPI_KEY` ;
-    3. Fichier `.cdsapirc` du dossier personnel (méthode officielle CKB) ;
-    4. Variables du fichier `.env` à la racine du projet ;
-    5. Fichier `.cdsapirc` local au projet (équiper une salle de PC).
+    2. Secrets de la plateforme (`st.secrets`, utilisé sur Streamlit Community
+       Cloud) ;
+    3. Variables d'environnement `CDSAPI_URL` / `CDSAPI_KEY` ;
+    4. Fichier `.cdsapirc` du dossier personnel (méthode officielle CKB) ;
+    5. Variables du fichier `.env` à la racine du projet ;
+    6. Fichier `.cdsapirc` local au projet (équiper une salle de PC).
     """
     # 1. Saisie dans l'interface
     if override_url and override_key:
@@ -225,7 +289,22 @@ def resolve_cds_config(override_url: str | None = None, override_key: str | None
             source="saisie directe dans l'application",
         )
 
-    # 2. Variables d'environnement
+    # 2. Secrets de la plateforme
+    #
+    #    C'est la source attendue sur un déploiement en ligne : les entrées de
+    #    « Settings → Secrets » y sont exposées par Streamlit. Elles sont
+    #    volontairement testées avant les variables d'environnement, afin qu'un
+    #    secret explicitement saisi prime sur une valeur héritée du système.
+    secret_url = _streamlit_secret("CDSAPI_URL") or _streamlit_secret("CDS_URL")
+    secret_key = _streamlit_secret("CDSAPI_KEY") or _streamlit_secret("CDS_KEY")
+    if secret_url and secret_key:
+        return CDSConfig(
+            url=secret_url.rstrip("/"),
+            key=secret_key,
+            source="secrets de la plateforme (Settings → Secrets)",
+        )
+
+    # 3. Variables d'environnement
     env_url = os.environ.get("CDSAPI_URL", "").strip()
     env_key = os.environ.get("CDSAPI_KEY", "").strip()
     if env_url and env_key:

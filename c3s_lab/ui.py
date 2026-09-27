@@ -331,9 +331,17 @@ def sidebar_controls() -> dict[str, Any]:
             st.caption(f"Source : {cfg.source}")
         else:
             st.warning("Aucune clé CDS — mode simulation")
-            st.caption(
-                "Rendez-vous sur la page **Connexion CDS** pour configurer la clé."
-            )
+            if config.deployment_kind() == "cloud":
+                st.caption(
+                    "L'application tourne en ligne : la clé ne peut pas être saisie "
+                    "dans ce navigateur, elle doit être déclarée par l'administrateur."
+                )
+                with st.expander("Comment déclarer la clé en ligne"):
+                    st.markdown(config.cloud_secret_hint())
+            else:
+                st.caption(
+                    "Rendez-vous sur la page **Connexion CDS** pour configurer la clé."
+                )
 
         st.divider()
         st.subheader("Source des données")

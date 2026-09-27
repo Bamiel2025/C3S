@@ -135,9 +135,23 @@ def page_accueil() -> None:
     else:
         st.warning(
             "Aucune clé API n'est détectée : l'application fonctionne avec un jeu de "
-            "données **simulé**, utile pour préparer une séance. Voir la page "
-            "**Connexion CDS** pour enregistrer votre clé et obtenir les données réelles."
+            "données **simulées**, utile pour préparer une séance."
         )
+        if config.deployment_kind() == "cloud":
+            # En ligne, la page de connexion est verrouillée pour les élèves et la
+            # saisie dans le navigateur n'est pas persistée : renvoyer l'enseignant
+            # vers cette page l'aurait envoyé dans une impasse.
+            st.info(
+                "**Vous êtes sur la version en ligne.** La clé CDS doit être déclarée "
+                "par l'administrateur de l'application, puis l'application redémarrée."
+            )
+            with st.expander("Déclarer la clé CDS en ligne"):
+                st.markdown(config.cloud_secret_hint())
+        else:
+            st.info(
+                "Voir la page **Connexion CDS** pour enregistrer votre clé et obtenir "
+                "les données réelles."
+            )
 
     st.divider()
     col1, col2, col3 = st.columns(3)

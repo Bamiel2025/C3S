@@ -319,6 +319,29 @@ app.main()
 > GitHub, vérifiez que `streamlit_app.py` se trouve **à la racine** du dépôt :
 > c'est sa racine qui est analysée, pas le dossier où vous vous situez.
 
+### La clé CDS en ligne
+
+En local, la clé est lue dans votre fichier `.env` ou `.cdsapirc`. **Ces fichiers
+ne sont pas versionnés** (voir `.gitignore`) : c'est volontaire, pour qu'aucun
+jeton ne soit publié. Sur un déploiement, ils sont donc absents, et la clé doit
+être déclarée par l'administrateur.
+
+Dans **Settings → Secrets** de Streamlit Community Cloud, ajoutez :
+
+```toml
+CDSAPI_URL = "https://cds.climate.copernicus.eu/api"
+CDSAPI_KEY = "<votre jeton d'accès personnel>"
+```
+
+Puis **Manage app → Restart** : les secrets ne sont lus qu'au démarrage.
+
+> Les noms sont sensibles à la casse et ne doivent pas contenir d'espace. Un
+> `CDSAPI_KEY` écrit avec des guillemets simples, ou `CDS API KEY`, sera ignoré
+> silencieusement — l'application basculera alors en mode simulation.
+
+Tant que la clé manque, la barre latérale l'affiche clairement, et l'onglet
+*Connexion CDS* reste inaccessible aux élèves : c'est normal et sans risque.
+
 ### Pourquoi pas Vercel ?
 
 Streamlit Communique avec le navigateur par **WebSockets** (serveur Tornado).
