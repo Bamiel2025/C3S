@@ -24,3 +24,5 @@ __pycache__/
 venv/
 .pytest_cache/
 _*.out
+_s*.txt
+_*.txt
